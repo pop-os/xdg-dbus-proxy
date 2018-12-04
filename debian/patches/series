@@ -1,0 +1,4 @@
+Add-license.patch
+Add-help.patch
+Use-EXIT_SUCCESS-FAILURE.patch
+Add-a-man-page.patch
