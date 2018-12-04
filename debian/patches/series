@@ -2,3 +2,4 @@ Add-license.patch
 Add-help.patch
 Use-EXIT_SUCCESS-FAILURE.patch
 Add-a-man-page.patch
+Reassure-compiler-that-parse_generic_args-always-returns-.patch
