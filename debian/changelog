@@ -1,5 +1,5 @@
 xdg-dbus-proxy (0.1.0-1) UNRELEASED; urgency=medium
 
-  * New package, split out from Flatpak 1.0.1
+  * New package, split out from Flatpak (Closes: #915579)
 
  -- Simon McVittie <smcv@debian.org>  Mon, 19 Nov 2018 18:47:57 +0000
