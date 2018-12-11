@@ -1,0 +1,547 @@
+From: Simon McVittie <smcv@debian.org>
+Date: Tue, 11 Dec 2018 18:02:59 +0000
+Subject: Add a simple unit test
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Forwarded: https://github.com/flatpak/xdg-dbus-proxy/pull/5
+---
+ Makefile.am           |  10 +-
+ backport-autoptr.h    |   2 +
+ build-aux/glib-tap.mk | 136 +++++++++++++++++++++++++++
+ build-aux/tap-test    |   5 +
+ configure.ac          |   6 +-
+ m4/glibtests.m4       |  31 +++++++
+ tests/Makefile.am.inc |  13 +++
+ tests/test-proxy.c    | 253 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 8 files changed, 452 insertions(+), 4 deletions(-)
+ create mode 100644 build-aux/glib-tap.mk
+ create mode 100755 build-aux/tap-test
+ create mode 100644 m4/glibtests.m4
+ create mode 100644 tests/Makefile.am.inc
+ create mode 100644 tests/test-proxy.c
+
+diff --git a/Makefile.am b/Makefile.am
+index e22cbb5..fad467f 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1,5 +1,6 @@
+-CLEANFILES=
+-EXTRA_DIST=
++include $(top_srcdir)/build-aux/glib-tap.mk
++
++AM_CFLAGS = $(GLIB_CFLAGS)
+ 
+ bin_PROGRAMS=xdg-dbus-proxy
+ 
+@@ -11,6 +12,9 @@ xdg_dbus_proxy_SOURCES = \
+ 	$(NULL)
+ 
+ xdg_dbus_proxy_LDADD = $(AM_LDADD) $(GLIB_LIBS)
+-xdg_dbus_proxy_CFLAGS = $(AM_CFLAGS) $(GLIB_CFLAGS)
+ 
+ include Makefile-docs.am
++include tests/Makefile.am.inc
++
++EXTRA_DIST += build-aux/glib-tap.mk
++EXTRA_DIST += build-aux/tap-test
+diff --git a/backport-autoptr.h b/backport-autoptr.h
+index 303f61a..e78acac 100644
+--- a/backport-autoptr.h
++++ b/backport-autoptr.h
+@@ -206,6 +206,8 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GMount, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GOutputStream, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GSocket, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GSocketAddress, g_object_unref)
++G_DEFINE_AUTOPTR_CLEANUP_FUNC(GSubprocess, g_object_unref)
++G_DEFINE_AUTOPTR_CLEANUP_FUNC(GSubprocessLauncher, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GTask, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GTlsCertificate, g_object_unref)
+ G_DEFINE_AUTOPTR_CLEANUP_FUNC(GTlsDatabase, g_object_unref)
+diff --git a/build-aux/glib-tap.mk b/build-aux/glib-tap.mk
+new file mode 100644
+index 0000000..68e5723
+--- /dev/null
++++ b/build-aux/glib-tap.mk
+@@ -0,0 +1,136 @@
++# GLIB - Library of useful C routines
++
++AM_TESTS_ENVIRONMENT= \
++	G_TEST_SRCDIR="$(abs_srcdir)" 		\
++	G_TEST_BUILDDIR="$(abs_builddir)" 	\
++	G_DEBUG=gc-friendly 			\
++	MALLOC_CHECK_=2 			\
++	MALLOC_PERTURB_=$$(($${RANDOM:-256} % 256))
++LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/build-aux/tap-driver.sh
++LOG_COMPILER = $(top_srcdir)/build-aux/tap-test
++
++NULL =
++
++# initialize variables for unconditional += appending
++BUILT_SOURCES =
++BUILT_EXTRA_DIST =
++CLEANFILES = *.log *.trs
++DISTCLEANFILES =
++MAINTAINERCLEANFILES =
++EXTRA_DIST =
++TESTS =
++
++installed_test_LTLIBRARIES =
++installed_test_PROGRAMS =
++installed_test_SCRIPTS =
++nobase_installed_test_DATA =
++
++noinst_LTLIBRARIES =
++noinst_PROGRAMS =
++noinst_SCRIPTS =
++noinst_DATA =
++
++check_LTLIBRARIES =
++check_PROGRAMS =
++check_SCRIPTS =
++check_DATA =
++
++# We support a fairly large range of possible variables.  It is expected that all types of files in a test suite
++# will belong in exactly one of the following variables.
++#
++# First, we support the usual automake suffixes, but in lowercase, with the customary meaning:
++#
++#   test_programs, test_scripts, test_data, test_ltlibraries
++#
++# The above are used to list files that are involved in both uninstalled and installed testing.  The
++# test_programs and test_scripts are taken to be actual testcases and will be run as part of the test suite.
++# Note that _data is always used with the nobase_ automake variable name to ensure that installed test data is
++# installed in the same way as it appears in the package layout.
++#
++# In order to mark a particular file as being only for one type of testing, use 'installed' or 'uninstalled',
++# like so:
++#
++#   installed_test_programs, uninstalled_test_programs
++#   installed_test_scripts, uninstalled_test_scripts
++#   installed_test_data, uninstalled_test_data
++#   installed_test_ltlibraries, uninstalled_test_ltlibraries
++#
++# Additionally, we support 'extra' infixes for programs and scripts.  This is used for support programs/scripts
++# that should not themselves be run as testcases (but exist to be used from other testcases):
++#
++#   test_extra_programs, installed_test_extra_programs, uninstalled_test_extra_programs
++#   test_extra_scripts, installed_test_extra_scripts, uninstalled_test_extra_scripts
++#
++# Additionally, for _scripts and _data, we support the customary dist_ prefix so that the named script or data
++# file automatically end up in the tarball.
++#
++#   dist_test_scripts, dist_test_data, dist_test_extra_scripts
++#   dist_installed_test_scripts, dist_installed_test_data, dist_installed_test_extra_scripts
++#   dist_uninstalled_test_scripts, dist_uninstalled_test_data, dist_uninstalled_test_extra_scripts
++#
++# Note that no file is automatically disted unless it appears in one of the dist_ variables.  This follows the
++# standard automake convention of not disting programs scripts or data by default.
++#
++# test_programs, test_scripts, uninstalled_test_programs and uninstalled_test_scripts (as well as their disted
++# variants) will be run as part of the in-tree 'make check'.  These are all assumed to be runnable under
++# gtester.  That's a bit strange for scripts, but it's possible.
++
++TESTS += $(test_programs) $(test_scripts) $(uninstalled_test_programs) $(uninstalled_test_scripts) \
++         $(dist_test_scripts) $(dist_uninstalled_test_scripts)
++
++# Note: build even the installed-only targets during 'make check' to ensure that they still work.
++# We need to do a bit of trickery here and manage disting via EXTRA_DIST instead of using dist_ prefixes to
++# prevent automake from mistreating gmake functions like $(wildcard ...) and $(addprefix ...) as if they were
++# filenames, including removing duplicate instances of the opening part before the space, eg. '$(addprefix'.
++all_test_programs     = $(test_programs) $(uninstalled_test_programs) $(installed_test_programs) \
++                        $(test_extra_programs) $(uninstalled_test_extra_programs) $(installed_test_extra_programs)
++all_test_scripts      = $(test_scripts) $(uninstalled_test_scripts) $(installed_test_scripts) \
++                        $(test_extra_scripts) $(uninstalled_test_extra_scripts) $(installed_test_extra_scripts)
++all_dist_test_scripts = $(dist_test_scripts) $(dist_uninstalled_test_scripts) $(dist_installed_test_scripts) \
++                        $(dist_test_extra_scripts) $(dist_uninstalled_test_extra_scripts) $(dist_installed_test_extra_scripts)
++all_test_scripts     += $(all_dist_test_scripts)
++EXTRA_DIST           += $(all_dist_test_scripts)
++all_test_data         = $(test_data) $(uninstalled_test_data) $(installed_test_data)
++all_dist_test_data    = $(dist_test_data) $(dist_uninstalled_test_data) $(dist_installed_test_data)
++all_test_data        += $(all_dist_test_data)
++EXTRA_DIST           += $(all_dist_test_data)
++all_test_ltlibs       = $(test_ltlibraries) $(uninstalled_test_ltlibraries) $(installed_test_ltlibraries)
++
++if ENABLE_ALWAYS_BUILD_TESTS
++noinst_LTLIBRARIES += $(all_test_ltlibs)
++noinst_PROGRAMS += $(all_test_programs)
++noinst_SCRIPTS += $(all_test_scripts)
++noinst_DATA += $(all_test_data)
++else
++check_LTLIBRARIES += $(all_test_ltlibs)
++check_PROGRAMS += $(all_test_programs)
++check_SCRIPTS += $(all_test_scripts)
++check_DATA += $(all_test_data)
++endif
++
++if ENABLE_INSTALLED_TESTS
++installed_test_PROGRAMS += $(test_programs) $(installed_test_programs) \
++                          $(test_extra_programs) $(installed_test_extra_programs)
++installed_test_SCRIPTS += $(test_scripts) $(installed_test_scripts) \
++                          $(test_extra_scripts) $(installed_test_extra_scripts)
++installed_test_SCRIPTS += $(dist_test_scripts) $(dist_test_extra_scripts) \
++                          $(dist_installed_test_scripts) $(dist_installed_test_extra_scripts)
++nobase_installed_test_DATA += $(test_data) $(installed_test_data)
++nobase_installed_test_DATA += $(dist_test_data) $(dist_installed_test_data)
++installed_test_LTLIBRARIES += $(test_ltlibraries) $(installed_test_ltlibraries)
++installed_testcases = $(test_programs) $(installed_test_programs) \
++                      $(test_scripts) $(installed_test_scripts) \
++                      $(dist_test_scripts) $(dist_installed_test_scripts)
++
++installed_test_meta_DATA = $(installed_testcases:=.test)
++
++%.test: %$(EXEEXT) Makefile
++	$(AM_V_GEN) ($(MKDIR_P) $(@D); \
++	echo '[Test]' > $@.tmp; \
++	echo 'Type=session' >> $@.tmp; \
++	echo 'Exec=$(installed_testdir)/$(notdir $<) --tap' >> $@.tmp; \
++	echo 'Output=TAP' >> $@.tmp; \
++	mv $@.tmp $@)
++
++CLEANFILES += $(installed_test_meta_DATA)
++endif
+diff --git a/build-aux/tap-test b/build-aux/tap-test
+new file mode 100755
+index 0000000..f8b1f55
+--- /dev/null
++++ b/build-aux/tap-test
+@@ -0,0 +1,5 @@
++#! /bin/sh
++
++# run a GTest in tap mode. The test binary is passed as $1
++
++exec "$1" -k --tap
+diff --git a/configure.ac b/configure.ac
+index 4814afe..b5bb94f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -25,10 +25,14 @@ if test "x$GCC" = "xyes"; then
+   esac
+ fi
+ 
+-PKG_CHECK_MODULES(GLIB, [glib-2.0 gio-2.0 gio-unix-2.0])
++PKG_CHECK_MODULES(GLIB, [glib-2.0 >= 2.40 gio-2.0 gio-unix-2.0])
+ AC_SUBST(GLIB_CFLAGS)
+ AC_SUBST(GLIB_LIBS)
+ 
++AC_PROG_AWK
++AC_REQUIRE_AUX_FILE([tap-driver.sh])
++GLIB_TESTS
++
+ AC_ARG_ENABLE(man,
+               [AS_HELP_STRING([--enable-man],
+                               [generate man pages [default=auto]])],,
+diff --git a/m4/glibtests.m4 b/m4/glibtests.m4
+new file mode 100644
+index 0000000..581726a
+--- /dev/null
++++ b/m4/glibtests.m4
+@@ -0,0 +1,31 @@
++# Increment this whenever this file is changed.
++#serial 1
++
++dnl GLIB_TESTS
++dnl
++
++AC_DEFUN([GLIB_TESTS],
++[
++  AC_ARG_ENABLE(installed-tests,
++                AS_HELP_STRING([--enable-installed-tests],
++                               [Enable installation of some test cases]),
++                [case ${enableval} in
++                  yes) ENABLE_INSTALLED_TESTS="1"  ;;
++                  no)  ENABLE_INSTALLED_TESTS="" ;;
++                  *) AC_MSG_ERROR([bad value ${enableval} for --enable-installed-tests]) ;;
++                 esac])
++  AM_CONDITIONAL([ENABLE_INSTALLED_TESTS], test "$ENABLE_INSTALLED_TESTS" = "1")
++  AC_ARG_ENABLE(always-build-tests,
++                AS_HELP_STRING([--enable-always-build-tests],
++                               [Enable always building tests during 'make all']),
++                [case ${enableval} in
++                  yes) ENABLE_ALWAYS_BUILD_TESTS="1"  ;;
++                  no)  ENABLE_ALWAYS_BUILD_TESTS="" ;;
++                  *) AC_MSG_ERROR([bad value ${enableval} for --enable-always-build-tests]) ;;
++                 esac])
++  AM_CONDITIONAL([ENABLE_ALWAYS_BUILD_TESTS], test "$ENABLE_ALWAYS_BUILD_TESTS" = "1")
++  if test "$ENABLE_INSTALLED_TESTS" = "1"; then
++    AC_SUBST(installed_test_metadir, [${datadir}/installed-tests/]AC_PACKAGE_NAME)
++    AC_SUBST(installed_testdir, [${libexecdir}/installed-tests/]AC_PACKAGE_NAME)
++  fi
++])
+diff --git a/tests/Makefile.am.inc b/tests/Makefile.am.inc
+new file mode 100644
+index 0000000..d017102
+--- /dev/null
++++ b/tests/Makefile.am.inc
+@@ -0,0 +1,13 @@
++# vim:set ft=automake:
++
++AM_TESTS_ENVIRONMENT += \
++	DBUS_PROXY=${abs_top_builddir}/xdg-dbus-proxy \
++	$(NULL)
++
++test_programs = \
++	test-proxy \
++	$(NULL)
++
++test_proxy_CPPFLAGS = -DBINDIR=\"$(bindir)\"
++test_proxy_SOURCES = tests/test-proxy.c
++test_proxy_LDADD = $(AM_LDADD) $(GLIB_LIBS)
+diff --git a/tests/test-proxy.c b/tests/test-proxy.c
+new file mode 100644
+index 0000000..2644a61
+--- /dev/null
++++ b/tests/test-proxy.c
+@@ -0,0 +1,253 @@
++/*
++ * Copyright © 2018 Collabora Ltd.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "config.h"
++
++#include <errno.h>
++#include <fcntl.h>
++#include <signal.h>
++
++#include <glib.h>
++#include <glib-unix.h>
++#include <glib/gstdio.h>
++#include <gio/gio.h>
++
++#define DBUS_SERVICE_DBUS "org.freedesktop.DBus"
++#define DBUS_PATH_DBUS "/org/freedesktop/DBus"
++#define DBUS_INTERFACE_DBUS "org.freedesktop.DBus"
++
++typedef struct
++{
++  GDBusConnection *proxied_conn;
++  GSubprocess *dbus_daemon;
++  GSubprocess *proxy;
++  gchar *dbus_address;
++  gchar *temp_directory;
++  gchar *proxy_socket;
++  gchar *proxy_address;
++  const gchar *proxy_path;
++  int sync_pipe;
++} Fixture;
++
++typedef struct
++{
++  int dummy;
++} Config;
++
++static void
++setup (Fixture *f,
++       gconstpointer context G_GNUC_UNUSED)
++{
++  g_autoptr(GSubprocessLauncher) launcher = NULL;
++  g_autoptr(GError) error = NULL;
++  GInputStream *address_pipe;
++  gchar address_buffer[4096] = { 0 };
++  g_autofree gchar *escaped = NULL;
++  char *newline;
++
++  f->sync_pipe = -1;
++
++  launcher = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE);
++  f->dbus_daemon = g_subprocess_launcher_spawn (launcher, &error,
++                                                "dbus-daemon",
++                                                "--session",
++                                                "--print-address=1",
++                                                "--nofork",
++                                                "--nosyslog",
++                                                NULL);
++  g_assert_no_error (error);
++  g_assert_nonnull (f->dbus_daemon);
++
++  address_pipe = g_subprocess_get_stdout_pipe (f->dbus_daemon);
++
++  while (strchr (address_buffer, '\n') == NULL)
++    {
++      if (strlen (address_buffer) >= sizeof (address_buffer) - 1)
++        g_error ("Read %" G_GSIZE_FORMAT " bytes from dbus-daemon with "
++                 "no newline",
++                 sizeof (address_buffer) - 1);
++
++      g_input_stream_read (address_pipe,
++                           address_buffer + strlen (address_buffer),
++                           sizeof (address_buffer) - strlen (address_buffer),
++                           NULL, &error);
++      g_assert_no_error (error);
++    }
++
++  newline = strchr (address_buffer, '\n');
++  g_assert_nonnull (newline);
++  *newline = '\0';
++  f->dbus_address = g_strdup (address_buffer);
++
++  f->proxy_path = g_getenv ("DBUS_PROXY");
++
++  if (f->proxy_path == NULL)
++    f->proxy_path = BINDIR "/xdg-dbus-proxy";
++
++  f->temp_directory = g_dir_make_tmp ("xdg-dbus-proxy-test.XXXXXX", &error);
++  g_assert_no_error (error);
++  f->proxy_socket = g_build_filename (f->temp_directory, "proxy", NULL);
++  escaped = g_dbus_address_escape_value (f->proxy_socket);
++  f->proxy_address = g_strdup_printf ("unix:path=%s", escaped);
++}
++
++enum
++{
++  READ_END = 0,
++  WRITE_END = 1,
++  PIPE_FDS
++};
++
++static void
++test_basics (Fixture *f,
++             gconstpointer context G_GNUC_UNUSED)
++{
++  g_autoptr(GSubprocessLauncher) launcher = NULL;
++  g_autoptr(GError) error = NULL;
++  g_autoptr(GVariant) tuple = NULL;
++  g_auto(GStrv) strv = NULL;
++  const char *proxied_name;
++  int sync_pipe[PIPE_FDS];
++  char buf;
++  ssize_t bytes_read;
++  gsize i;
++  gboolean found;
++
++  g_unix_open_pipe (sync_pipe, FD_CLOEXEC, &error);
++  g_assert_no_error (error);
++  f->sync_pipe = sync_pipe[READ_END];
++
++  launcher = g_subprocess_launcher_new (G_SUBPROCESS_FLAGS_STDOUT_PIPE);
++  g_subprocess_launcher_take_fd (launcher, sync_pipe[WRITE_END], 3);
++  sync_pipe[WRITE_END] = -1;
++
++  f->proxy = g_subprocess_launcher_spawn (launcher, &error,
++                                          f->proxy_path,
++                                          "--fd=3",
++                                          f->dbus_address,
++                                          f->proxy_socket,
++                                          NULL);
++  g_assert_no_error (error);
++  g_assert_nonnull (f->proxy);
++
++  /* Wait for the proxy to be ready */
++  bytes_read = read (sync_pipe[READ_END], &buf, 1);
++  g_assert_cmpint (bytes_read, ==, 1);
++
++  f->proxied_conn = g_dbus_connection_new_for_address_sync (f->proxy_address,
++                                                            G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT
++                                                            | G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION,
++                                                            NULL, NULL, &error);
++  g_assert_no_error (error);
++  g_assert_nonnull (f->proxied_conn);
++  proxied_name = g_dbus_connection_get_unique_name (f->proxied_conn);
++
++  tuple = g_dbus_connection_call_sync (f->proxied_conn, DBUS_SERVICE_DBUS,
++                                       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS,
++                                       "ListNames", NULL,
++                                       G_VARIANT_TYPE ("(as)"),
++                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL,
++                                       &error);
++  g_assert_no_error (error);
++  g_assert_nonnull (tuple);
++  g_variant_get (tuple, "(^as)", &strv);
++  found = FALSE;
++
++  /* As a simple test of the proxying, assert that the array contains the
++   * proxied connection itself */
++  for (i = 0; strv[i] != NULL; i++)
++    {
++      g_test_message ("ListNames(): %s", strv[i]);
++
++      if (g_strcmp0 (strv[i], proxied_name) == 0)
++        found = TRUE;
++    }
++
++  g_assert_true (found);
++}
++
++static void
++teardown (Fixture *f,
++          gconstpointer context G_GNUC_UNUSED)
++{
++  g_autoptr(GError) error = NULL;
++
++  if (f->dbus_daemon != NULL)
++    {
++      g_subprocess_send_signal (f->dbus_daemon, SIGTERM);
++      g_subprocess_wait (f->dbus_daemon, NULL, &error);
++      g_assert_no_error (error);
++    }
++
++  if (f->sync_pipe >= 0)
++    {
++      g_close (f->sync_pipe, &error);
++      g_assert_no_error (error);
++      f->sync_pipe = -1;
++    }
++
++  if (f->proxy != NULL)
++    {
++      /* It terminates in response to us closing the sync_pipe */
++      g_subprocess_wait_check (f->proxy, NULL, &error);
++      g_assert_no_error (error);
++    }
++
++  if (f->proxied_conn != NULL)
++    {
++      g_dbus_connection_close_sync (f->proxied_conn, NULL, &error);
++
++      if (error != NULL)
++        {
++          g_assert_error (error, G_IO_ERROR, G_IO_ERROR_CLOSED);
++          g_clear_error (&error);
++        }
++    }
++
++  if (f->proxy_socket != NULL)
++    {
++      if (g_remove (f->proxy_socket) != 0 && errno != ENOENT)
++        g_warning ("remove %s: %s", f->proxy_socket, g_strerror (errno));
++
++      g_free (f->proxy_socket);
++    }
++
++  if (f->temp_directory != NULL)
++    {
++      if (g_rmdir (f->temp_directory) != 0)
++        g_warning ("rmdir %s: %s", f->temp_directory, g_strerror (errno));
++
++      g_free (f->temp_directory);
++    }
++
++  g_clear_object (&f->proxied_conn);
++  g_clear_object (&f->dbus_daemon);
++  g_clear_object (&f->proxy);
++  g_free (f->dbus_address);
++  g_free (f->proxy_address);
++}
++
++int
++main (int argc,
++      char **argv)
++{
++  g_test_init (&argc, &argv, NULL);
++
++  g_test_add ("/basics", Fixture, NULL, setup, test_basics, teardown);
++
++  return g_test_run ();
++}

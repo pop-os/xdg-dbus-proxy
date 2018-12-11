@@ -3,3 +3,5 @@ Add-help.patch
 Use-EXIT_SUCCESS-FAILURE.patch
 Add-a-man-page.patch
 Reassure-compiler-that-parse_generic_args-always-returns-.patch
+build-Put-Autotools-droppings-in-build-aux.patch
+Add-a-simple-unit-test.patch
