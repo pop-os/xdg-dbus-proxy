@@ -6,6 +6,8 @@ Uploaders:
  Simon McVittie <smcv@debian.org>,
 Build-Depends:
  debhelper (>= 10),
+ docbook-xml,
+ docbook-xsl,
  libglib2.0-dev,
  xsltproc,
 Rules-Requires-Root: no
