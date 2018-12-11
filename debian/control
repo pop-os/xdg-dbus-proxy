@@ -16,7 +16,7 @@ Vcs-Browser: https://salsa.debian.org/debian/xdg-dbus-proxy
 
 Package: xdg-dbus-proxy
 Architecture: any
-Multi-arch: foreign
+Multi-Arch: foreign
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
