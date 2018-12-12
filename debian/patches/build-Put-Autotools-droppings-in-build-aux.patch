@@ -3,6 +3,7 @@ Date: Tue, 11 Dec 2018 18:12:46 +0000
 Subject: build: Put Autotools droppings in build-aux/
 
 Signed-off-by: Simon McVittie <smcv@collabora.com>
+Applied-upstream: 0.1.1, commit:79745cd52d19258ee5345b01e2c3a4ba217bce79
 ---
  configure.ac | 1 +
  1 file changed, 1 insertion(+)
