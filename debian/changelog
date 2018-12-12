@@ -1,4 +1,4 @@
-xdg-dbus-proxy (0.1.0-1) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.0-1) unstable; urgency=medium
 
   * Initial release under this name (Closes: #915579).
     xdg-dbus-proxy was previously flatpak-dbus-proxy, in the flatpak
@@ -8,4 +8,4 @@ xdg-dbus-proxy (0.1.0-1) UNRELEASED; urgency=medium
     and a simple regression test (upstream PRs #2, #3, #5) and to
     fix a compiler warning (upstream PR #4)
 
- -- Simon McVittie <smcv@debian.org>  Mon, 19 Nov 2018 18:47:57 +0000
+ -- Simon McVittie <smcv@debian.org>  Wed, 12 Dec 2018 14:57:14 +0000
