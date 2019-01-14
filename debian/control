@@ -7,7 +7,7 @@ Uploaders:
 Build-Depends:
  autoconf-archive,
  dbus <!nocheck>,
- debhelper-compat (= 11),
+ debhelper-compat (= 12),
  docbook-xml,
  docbook-xsl,
  libglib2.0-dev,
