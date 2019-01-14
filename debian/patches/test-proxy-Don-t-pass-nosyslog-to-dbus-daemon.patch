@@ -1,0 +1,24 @@
+From: Simon McVittie <smcv@collabora.com>
+Date: Wed, 12 Dec 2018 13:25:33 +0000
+Subject: test-proxy: Don't pass --nosyslog to dbus-daemon
+
+This option is unsupported in older versions.
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Applied-upstream, 0.1.1, commit:aa28a35013a219e4a006a57c930955ca40c14500
+---
+ tests/test-proxy.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tests/test-proxy.c b/tests/test-proxy.c
+index efcf398..475750f 100644
+--- a/tests/test-proxy.c
++++ b/tests/test-proxy.c
+@@ -68,7 +68,6 @@ setup (Fixture *f,
+                                                 "--session",
+                                                 "--print-address=1",
+                                                 "--nofork",
+-                                                "--nosyslog",
+                                                 NULL);
+   g_assert_no_error (error);
+   g_assert_nonnull (f->dbus_daemon);

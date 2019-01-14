@@ -1,0 +1,23 @@
+From: Simon McVittie <smcv@collabora.com>
+Date: Wed, 12 Dec 2018 13:42:40 +0000
+Subject: test-proxy: Use backport-autoptr.h to work on older OSs
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Applied-upstream, 0.1.1, commit:5e532cca1bcfd706f12eb6e188a660b9fef4a663
+---
+ tests/test-proxy.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tests/test-proxy.c b/tests/test-proxy.c
+index 475750f..125d1fc 100644
+--- a/tests/test-proxy.c
++++ b/tests/test-proxy.c
+@@ -27,6 +27,8 @@
+ #include <glib/gstdio.h>
+ #include <gio/gio.h>
+ 
++#include "backport-autoptr.h"
++
+ #define DBUS_SERVICE_DBUS "org.freedesktop.DBus"
+ #define DBUS_PATH_DBUS "/org/freedesktop/DBus"
+ #define DBUS_INTERFACE_DBUS "org.freedesktop.DBus"

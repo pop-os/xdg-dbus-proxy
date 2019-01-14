@@ -1,0 +1,25 @@
+From: Simon McVittie <smcv@collabora.com>
+Date: Wed, 12 Dec 2018 13:17:21 +0000
+Subject: test-proxy: Add missing header for strchr, strlen
+
+In current Debian unstable this is brought in by some other header,
+but in Ubuntu 16.04 'xenial' as used on Travis-CI that isn't the case.
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Applied-upstream, 0.1.1, commit:3b6661429fd558c3d30bd61720016507ea8f73a4
+---
+ tests/test-proxy.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/tests/test-proxy.c b/tests/test-proxy.c
+index 2644a61..efcf398 100644
+--- a/tests/test-proxy.c
++++ b/tests/test-proxy.c
+@@ -20,6 +20,7 @@
+ #include <errno.h>
+ #include <fcntl.h>
+ #include <signal.h>
++#include <string.h>
+ 
+ #include <glib.h>
+ #include <glib-unix.h>
