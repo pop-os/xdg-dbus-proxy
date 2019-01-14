@@ -4,7 +4,7 @@ Subject: Add --help
 
 Print the expected usage message when the --help option is used.
 
-(cherry picked from commit 5f4b8113b374eaa658c5c457742df7e2df52c1cd)
+Origin: upstream, 0.1.1, commit:5f4b8113b374eaa658c5c457742df7e2df52c1cd
 ---
  dbus-proxy.c | 38 ++++++++++++++++++++++++++++++++++++--
  1 file changed, 36 insertions(+), 2 deletions(-)

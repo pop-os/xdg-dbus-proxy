@@ -4,7 +4,7 @@ Subject: Use EXIT_SUCCESS/FAILURE
 
 Trivial cleanup.
 
-(cherry picked from commit 7af339ff3df9f465c0e6a390738e5520a39d5a3d)
+Origin: upstream, 0.1.1, commit:7af339ff3df9f465c0e6a390738e5520a39d5a3d
 ---
  dbus-proxy.c | 10 +++++-----
  1 file changed, 5 insertions(+), 5 deletions(-)

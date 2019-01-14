@@ -4,7 +4,7 @@ Subject: Add a simple unit test
 
 Signed-off-by: Simon McVittie <smcv@collabora.com>
 Forwarded: https://github.com/flatpak/xdg-dbus-proxy/pull/5
-Applied-upstream: 0.1.1, commit:79745cd52d19258ee5345b01e2c3a4ba217bce79
+Applied-upstream: 0.1.1, commit:e339140bb59dae022cd30b91d785a601aa1f1aeb
 ---
  Makefile.am           |  10 +-
  backport-autoptr.h    |   2 +

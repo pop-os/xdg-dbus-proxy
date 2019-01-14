@@ -4,7 +4,7 @@ Subject: Add license
 
 Just copied over from flatpak, where this code used to live.
 
-(cherry picked from commit d76c1ec488672cf33c9c64871ed11e81452c16ae)
+Origin: upstream, 0.1.1, commit:d76c1ec488672cf33c9c64871ed11e81452c16ae
 ---
  COPYING | 502 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 502 insertions(+)

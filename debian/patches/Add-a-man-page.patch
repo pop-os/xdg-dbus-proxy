@@ -6,7 +6,7 @@ Most of the content here is taken from the big comment
 at the top of flatpak-proxy.c, slightly rearranged
 and reformatted.
 
-(cherry picked from commit 2a0ff0e641b831e17b11d7e216aa62fa67ab13d6)
+Origin: upstream, 0.1.1, commit:2a0ff0e641b831e17b11d7e216aa62fa67ab13d6
 ---
  Makefile-docs.am   |  18 +++++
  Makefile.am        |   5 ++
