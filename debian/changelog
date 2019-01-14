@@ -1,3 +1,13 @@
+xdg-dbus-proxy (0.1.0-2) unstable; urgency=medium
+
+  * Improve patch metadata
+  * Add patches to facilitate backporting to stretch
+  * Standards-Version: 4.3.0
+  * Use debhelper-compat 12
+  * Ensure that build-aux/tap-test is executable before running tests
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 14 Jan 2019 20:05:06 +0000
+
 xdg-dbus-proxy (0.1.0-1) unstable; urgency=medium
 
   * Initial release under this name (Closes: #915579).
