@@ -2,6 +2,7 @@ xdg-dbus-proxy (0.1.1-1) UNRELEASED; urgency=medium
 
   * d/upstream/metadata: Add DEP-12 metadata
   * New upstream release
+    - Drop all patches, applied upstream
 
  -- Simon McVittie <smcv@debian.org>  Fri, 18 Jan 2019 08:53:03 +0000
 
