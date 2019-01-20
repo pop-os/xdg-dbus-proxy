@@ -1,4 +1,4 @@
-xdg-dbus-proxy (0.1.1-1) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.1-1) unstable; urgency=medium
 
   * d/upstream/metadata: Add DEP-12 metadata
   * New upstream release
@@ -7,7 +7,7 @@ xdg-dbus-proxy (0.1.1-1) UNRELEASED; urgency=medium
     Now that it's part of the upstream source and not added by a patch,
     it already has suitable permissions.
 
- -- Simon McVittie <smcv@debian.org>  Fri, 18 Jan 2019 08:53:03 +0000
+ -- Simon McVittie <smcv@debian.org>  Sun, 20 Jan 2019 11:13:12 +0000
 
 xdg-dbus-proxy (0.1.0-2) unstable; urgency=medium
 
