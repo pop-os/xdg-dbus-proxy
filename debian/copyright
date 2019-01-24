@@ -6,7 +6,8 @@ License: LGPL-2.1+
 Files:
  *
 Copyright:
- © 2015 Red Hat, Inc
+ © 2015-2019 Red Hat, Inc
+ © 2018 Collabora Ltd.
 License: LGPL-2.1+
 
 Files:
@@ -22,7 +23,7 @@ Files:
  debian/*
 Copyright:
  © 2016-2018 Simon McVittie
- © 2016-2018 Collabora Ltd.
+ © 2016-2019 Collabora Ltd.
 License: LGPL-2+
 
 License: LGPL-2+
