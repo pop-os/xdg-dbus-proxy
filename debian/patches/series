@@ -1,1 +1,4 @@
 Fix-segfault-when-flatpak_proxy_start-fails.patch
+build-Forbid-AX_-prefixed-patterns-more-selectively.patch
+build-Adapt-to-AX_CODE_COVERAGE-API-change.patch
+build-Use-CODE_COVERAGE_CPPFLAGS.patch

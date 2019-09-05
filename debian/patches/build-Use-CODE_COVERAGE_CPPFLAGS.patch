@@ -1,0 +1,27 @@
+From: Simon McVittie <smcv@collabora.com>
+Date: Wed, 30 Jan 2019 10:00:10 +0000
+Subject: build: Use CODE_COVERAGE_CPPFLAGS
+
+This is part of the documented API of AX_CODE_COVERAGE, although it
+isn't amazingly important (all it does is to disable assert() to avoid
+assertions being counted as unreached).
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Forwarded: https://github.com/flatpak/xdg-dbus-proxy/pull/9
+---
+ Makefile.am | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index eb81c60..949980d 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1,5 +1,8 @@
+ include $(top_srcdir)/build-aux/glib-tap.mk
+ 
++AM_CPPFLAGS = \
++	$(CODE_COVERAGE_CPPFLAGS) \
++	$(NULL)
+ AM_CFLAGS = \
+ 	$(GLIB_CFLAGS) \
+ 	$(CODE_COVERAGE_CFLAGS) \

@@ -1,0 +1,43 @@
+From: Simon McVittie <smcv@collabora.com>
+Date: Wed, 30 Jan 2019 09:41:17 +0000
+Subject: build: Forbid AX_-prefixed patterns more selectively
+
+Similar to <https://gitlab.freedesktop.org/dbus/dbus/merge_requests/86>.
+
+We want to make autoconf fail early and with a user-comprehensible
+message if autoconf-archive isn't installed, rather than generating
+a configure script with syntax errors, or a configure script that runs
+successfully but doesn't do what we intended.
+
+However, autoconf-archive doesn't actually guarantee not to use
+AX_-prefixed shell variable names without m4_pattern_allow'ing them
+(unlike Autoconf, Automake, Libtool and pkg-config, which explicitly use
+m4_pattern_allow for variables with AC_, AM_, LT_ and PKG_ prefixes), so
+it isn't safe to assume that they won't be used. In particular,
+according to dbus#249, recent versions of AX_CHECK_GNU_MAKE use
+$AX_CHECK_GNU_MAKE_HEADLINE as a shell variable.
+
+Instead, specifically forbid the name of the single macro that we
+actually use in this project.
+
+Signed-off-by: Simon McVittie <smcv@collabora.com>
+Forwarded: https://github.com/flatpak/xdg-dbus-proxy/pull/9
+---
+ configure.ac | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 59338be..82c54bc 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -3,8 +3,8 @@ AC_PREREQ([2.63])
+ AC_INIT([xdg-dbus-proxy],[0.1.1])
+ AC_CONFIG_AUX_DIR([build-aux])
+ 
+-m4_pattern_forbid([^AX_],
+-  [Unexpanded AX_ macro found. Please install GNU autoconf-archive])
++m4_pattern_forbid([^AX_CODE_COVERAGE$],
++  [Unexpanded AX_CODE_COVERAGE macro found. Please install GNU autoconf-archive])
+ 
+ AC_USE_SYSTEM_EXTENSIONS
+ AC_SYS_LARGEFILE
