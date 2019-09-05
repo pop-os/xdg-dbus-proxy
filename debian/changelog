@@ -1,8 +1,5 @@
-xdg-dbus-proxy (0.1.1-2) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.1-2) unstable; urgency=medium
 
-  * d/salsa-ci.yml: Request standard CI on salsa.debian.org
-  * Remove redundant --libexecdir=/usr/libexec.
-    This is the default at debhelper compat level 12.
   * d/p/Fix-segfault-when-flatpak_proxy_start-fails.patch:
     Add patch from upstream to fix a crash when startup fails
   * d/p/build-Forbid-AX_-prefixed-patterns-more-selectively.patch,
@@ -10,10 +7,13 @@ xdg-dbus-proxy (0.1.1-2) UNRELEASED; urgency=medium
     d/p/build-Use-CODE_COVERAGE_CPPFLAGS.patch:
     Add patches proposed upstream to fix FTBFS with autoconf-archive
     20190106
+  * Remove redundant --libexecdir=/usr/libexec.
+    This is the default at debhelper compat level 12.
   * Standards-Version: 4.4.0
   * d/copyright: Update
+  * d/salsa-ci.yml: Request standard CI on salsa.debian.org
 
- -- Simon McVittie <smcv@debian.org>  Sun, 23 Jun 2019 20:12:04 +0100
+ -- Simon McVittie <smcv@debian.org>  Thu, 05 Sep 2019 08:54:23 +0100
 
 xdg-dbus-proxy (0.1.1-1) unstable; urgency=medium
 
