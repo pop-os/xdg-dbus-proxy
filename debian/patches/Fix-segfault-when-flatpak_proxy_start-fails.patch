@@ -1,0 +1,29 @@
+From: Matt Merhar <mattmerhar@protonmail.com>
+Date: Sat, 19 Jan 2019 19:55:10 -0500
+Subject: Fix segfault when flatpak_proxy_start() fails
+
+Per the docs on g_socket_listener_add_address(), setting error to NULL
+causes the parameter to be ignored. If an error occurs in
+flatpak_proxy_start(), start_proxy() will attempt to print
+error->message where error is then NULL, causing a segfault.
+
+So, don't set error to NULL.
+
+Signed-off-by: Matt Merhar <mattmerhar@protonmail.com>
+Origin: upstream, 0.1.2, commit:30aeffa497f6f12c49ec00420345b4e4cb3022c3
+---
+ flatpak-proxy.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/flatpak-proxy.c b/flatpak-proxy.c
+index fff7686..2a23048 100644
+--- a/flatpak-proxy.c
++++ b/flatpak-proxy.c
+@@ -2825,7 +2825,6 @@ flatpak_proxy_start (FlatpakProxy *proxy, GError **error)
+ 
+   address = g_unix_socket_address_new (proxy->socket_path);
+ 
+-  error = NULL;
+   res = g_socket_listener_add_address (G_SOCKET_LISTENER (proxy),
+                                        address,
+                                        G_SOCKET_TYPE_STREAM,
