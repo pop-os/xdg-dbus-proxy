@@ -1,3 +1,10 @@
+xdg-dbus-proxy (0.1.2-1) UNRELEASED; urgency=medium
+
+  * New upstream release
+    - Drop all patches, applied upstream
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 18 Sep 2019 22:31:50 +0100
+
 xdg-dbus-proxy (0.1.1-2) unstable; urgency=medium
 
   * d/p/Fix-segfault-when-flatpak_proxy_start-fails.patch:
