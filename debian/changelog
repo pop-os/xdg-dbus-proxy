@@ -1,9 +1,9 @@
-xdg-dbus-proxy (0.1.2-1) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.2-1) unstable; urgency=medium
 
   * New upstream release
     - Drop all patches, applied upstream
 
- -- Simon McVittie <smcv@debian.org>  Wed, 18 Sep 2019 22:31:50 +0100
+ -- Simon McVittie <smcv@debian.org>  Thu, 19 Sep 2019 08:11:28 +0100
 
 xdg-dbus-proxy (0.1.1-2) unstable; urgency=medium
 
