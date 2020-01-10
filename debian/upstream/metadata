@@ -1,5 +1,4 @@
 ---
-Name: xdg-dbus-proxy
 Repository: https://github.com/flatpak/xdg-dbus-proxy.git
 Repository-Browse: https://github.com/flatpak/xdg-dbus-proxy
 Bug-Database: https://github.com/flatpak/xdg-dbus-proxy/issues
