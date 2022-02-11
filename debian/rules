@@ -12,6 +12,3 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		--enable-installed-tests \
 		$(NULL)
-
-override_dh_missing:
-	dh_missing --fail-missing
