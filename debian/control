@@ -5,12 +5,12 @@ Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.
 Uploaders:
  Simon McVittie <smcv@debian.org>,
 Build-Depends:
- autoconf-archive,
  dbus <!nocheck>,
  debhelper-compat (= 13),
  docbook-xml,
  docbook-xsl,
  libglib2.0-dev,
+ meson,
  xsltproc,
 Rules-Requires-Root: no
 Standards-Version: 4.6.0
