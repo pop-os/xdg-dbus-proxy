@@ -13,7 +13,7 @@ Build-Depends:
  meson,
  xsltproc,
 Rules-Requires-Root: no
-Standards-Version: 4.6.0
+Standards-Version: 4.6.1
 Homepage: https://github.com/flatpak/xdg-dbus-proxy
 Vcs-Git: https://salsa.debian.org/debian/xdg-dbus-proxy.git
 Vcs-Browser: https://salsa.debian.org/debian/xdg-dbus-proxy
