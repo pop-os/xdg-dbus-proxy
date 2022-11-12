@@ -1,3 +1,10 @@
+xdg-dbus-proxy (0.1.4-2) unstable; urgency=medium
+
+  * d/watch: Update for Github website changes
+  * Update standards version to 4.6.1 (no changes needed)
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 12 Nov 2022 17:29:46 +0000
+
 xdg-dbus-proxy (0.1.4-1) unstable; urgency=medium
 
   * New upstream release
