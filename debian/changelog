@@ -1,3 +1,12 @@
+xdg-dbus-proxy (0.1.4-3) unstable; urgency=medium
+
+  * Depend on dbus-daemon for tests instead of dbus.
+    The tests start their own mock session bus instance, and do not require
+    the implementation of the well-known system bus that is provided by the
+    dbus package.
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 08 Dec 2022 10:46:11 +0000
+
 xdg-dbus-proxy (0.1.4-2) unstable; urgency=medium
 
   * d/watch: Update for Github website changes
