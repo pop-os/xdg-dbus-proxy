@@ -5,7 +5,7 @@ Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.
 Uploaders:
  Simon McVittie <smcv@debian.org>,
 Build-Depends:
- dbus <!nocheck>,
+ dbus-daemon <!nocheck>,
  debhelper-compat (= 13),
  docbook-xml,
  docbook-xsl,
@@ -42,7 +42,7 @@ Multi-Arch: foreign
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
- dbus,
+ dbus-daemon,
  xdg-dbus-proxy,
 Recommends:
  gnome-desktop-testing,
