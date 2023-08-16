@@ -19,7 +19,7 @@
 # vim:set ft=automake:
 
 # aminclude_static.am generated automatically by Autoconf
-# from AX_AM_MACROS_STATIC on Wed May 11 10:15:06 BST 2022
+# from AX_AM_MACROS_STATIC on Mon Aug  7 09:54:57 CEST 2023
 
 
 
@@ -455,7 +455,8 @@ am__DIST_COMMON = $(srcdir)/Makefile-docs.am $(srcdir)/Makefile.in \
 	$(top_srcdir)/build-aux/tap-driver.sh \
 	$(top_srcdir)/build-aux/test-driver COPYING INSTALL NEWS \
 	README.md build-aux/compile build-aux/depcomp \
-	build-aux/install-sh build-aux/missing
+	build-aux/install-sh build-aux/missing compile depcomp \
+	install-sh missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
@@ -597,7 +598,7 @@ CLEANFILES = *.log *.trs $(am__append_13) $(am__append_14)
 DISTCLEANFILES = 
 MAINTAINERCLEANFILES = 
 EXTRA_DIST = $(all_dist_test_scripts) $(all_dist_test_data) \
-	xdg-dbus-proxy.xml tests/meson.build \
+	xdg-dbus-proxy.xml tests/meson.build tests/tap.test.in \
 	tests/use-as-subproject/README \
 	tests/use-as-subproject/config.h \
 	tests/use-as-subproject/dummy-config.h.in \
