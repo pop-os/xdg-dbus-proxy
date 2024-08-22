@@ -127,16 +127,19 @@
  * reply_serials, i.e. that a reply can only be sent once and by the real
  * recipient of an previously sent method call.
  *
- * We don't however trust the serials from the client. We verify that
- * they are strictly increasing to make sure the code is not confused
- * by serials being reused.
+ * Serial numbers larger than MAX_CLIENT_SERIAL reserved for messages created by the
+ * proxy itself (fake messages). This limits the possible values of serials
+ * available to the client to the value of MAX_CLIENT_SERIAL. Versions
+ * older than 0.1.6 required monotonically increasing serials instead. This
+ * mechanism was dropped since it caused regular issues with multiple D-Bus
+ * clients.
  *
  * In order to track the ownership of the allowed names we hijack the
  * connection after the initial Hello message, sending AddMatch,
  * ListNames and GetNameOwner messages to get a proper view of who
  * owns the names atm. Then we listen to NameOwnerChanged events for
- * further updates. This causes a slight offset between serials in the
- * client and serials as seen by the bus.
+ * further updates. This causes some serials abow MAX_CLIENT_SERIAL to be
+ * used for "fake messages".
  *
  * After that the filter is strictly passive, in that we never
  * construct our own requests. For each message received from the
@@ -192,6 +195,19 @@ typedef struct FlatpakProxyClient FlatpakProxyClient;
 #define AUTH_LINE_SENTINEL "\r\n"
 #define AUTH_BEGIN "BEGIN"
 
+// Use a relatively hight number since there are not a lot of fake requests we need to do
+#define MAX_CLIENT_SERIAL (G_MAXUINT32 - 65536)
+
+typedef enum {
+  /* The client has not sent BEGIN yet */
+  AUTH_WAITING_FOR_BEGIN,
+  /* The client sent BEGIN, but the server has not yet responded to the auth
+     messages that the client sent before */
+  AUTH_WAITING_FOR_BACKLOG,
+  /* Authentication is fully complete */
+  AUTH_COMPLETE,
+} AuthState;
+
 typedef enum {
   EXPECTED_REPLY_NONE,
   EXPECTED_REPLY_NORMAL,
@@ -205,8 +221,14 @@ typedef enum {
 
 typedef struct
 {
+  /* During write and message parsing this is the size of the valid data in the buffer.
+     During reads this is the capacity of the buffer. */
   gsize    size;
+  /* Offset to the first writable position (the buffer is full when pos ==
+   * size) */
   gsize    pos;
+  /* Offset to the first byte that hasn't been sent yet */
+  gsize    sent;
   int      refcount;
   gboolean send_credentials;
   GList   *control_messages;
@@ -285,16 +307,17 @@ struct FlatpakProxyClient
 
   FlatpakProxy *proxy;
 
-  gboolean      authenticated;
+  AuthState     auth_state;
+  gsize         auth_requests;
+  gsize         auth_replies;
   GByteArray   *auth_buffer;
 
   ProxySide     client_side;
   ProxySide     bus_side;
 
   /* Filtering data: */
-  guint32     serial_offset;
   guint32     hello_serial;
-  guint32     last_serial;
+  guint32     last_fake_serial;
   GHashTable *rewrite_reply;
   GHashTable *get_owner_reply;
 
@@ -442,6 +465,7 @@ flatpak_proxy_client_init (FlatpakProxyClient *client)
   init_side (client, &client->client_side);
   init_side (client, &client->bus_side);
 
+  client->last_fake_serial = MAX_CLIENT_SERIAL;
   client->auth_buffer = g_byte_array_new ();
   client->rewrite_reply = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_object_unref);
   client->get_owner_reply = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
@@ -767,6 +791,7 @@ buffer_new (gsize size, Buffer *old)
   if (old)
     {
       buffer->pos = old->pos;
+      buffer->sent = old->sent;
       /* Takes ownership of any old control messages */
       buffer->control_messages = old->control_messages;
       old->control_messages = NULL;
@@ -831,13 +856,18 @@ buffer_read (ProxySide *side,
              Buffer    *buffer,
              GSocket   *socket)
 {
-  gsize received;
+  FlatpakProxyClient *client = side->client;
+  gsize received = 0;
   GInputVector v;
   GError *error = NULL;
   GSocketControlMessage **messages;
   int num_messages, i;
 
-  if (side->extra_input_data)
+  if (client->auth_state == AUTH_WAITING_FOR_BACKLOG &&
+      side == &client->client_side)
+    return FALSE;
+
+  if (side->extra_input_data && client->auth_state == AUTH_COMPLETE)
     {
       gsize extra_size;
       const guchar *extra_bytes = g_bytes_get_data (side->extra_input_data, &extra_size);
@@ -859,7 +889,7 @@ buffer_read (ProxySide *side,
           g_clear_pointer (&side->extra_input_data, g_bytes_unref);
         }
     }
-  else
+  else if (!side->extra_input_data)
     {
       gssize res;
       int flags = 0;
@@ -935,7 +965,7 @@ buffer_write (ProxySide *side,
           return FALSE;
         }
 
-      buffer->pos = 1;
+      buffer->sent = 1;
       return TRUE;
     }
 
@@ -944,8 +974,8 @@ buffer_write (ProxySide *side,
   for (l = buffer->control_messages, i = 0; l != NULL; l = l->next, i++)
     messages[i] = l->data;
 
-  v.buffer = &buffer->data[buffer->pos];
-  v.size = buffer->size - buffer->pos;
+  v.buffer = &buffer->data[buffer->sent];
+  v.size = buffer->pos - buffer->sent;
 
   res = g_socket_send_message (socket, NULL, &v, 1,
                                messages, n_messages,
@@ -972,16 +1002,15 @@ buffer_write (ProxySide *side,
   g_list_free_full (buffer->control_messages, g_object_unref);
   buffer->control_messages = NULL;
 
-  buffer->pos += res;
+  buffer->sent += res;
   return TRUE;
 }
 
 static gboolean
-side_out_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
+send_outgoing_buffers (GSocket *socket, ProxySide *side)
 {
-  ProxySide *side = user_data;
   FlatpakProxyClient *client = side->client;
-  gboolean retval = G_SOURCE_CONTINUE;
+  gboolean all_done = FALSE;
 
   g_object_ref (client);
 
@@ -991,7 +1020,7 @@ side_out_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
 
       if (buffer_write (side, buffer, socket))
         {
-          if (buffer->pos == buffer->size)
+          if (buffer->sent == buffer->size)
             {
               side->buffers = g_list_delete_link (side->buffers, side->buffers);
               buffer_unref (buffer);
@@ -1007,8 +1036,7 @@ side_out_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
     {
       ProxySide *other_side = get_other_side (side);
 
-      side->out_source = NULL;
-      retval = G_SOURCE_REMOVE;
+      all_done = TRUE;
 
       if (other_side->closed)
         side_closed (side);
@@ -1016,7 +1044,24 @@ side_out_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
 
   g_object_unref (client);
 
-  return retval;
+  return all_done;
+}
+
+static gboolean
+side_out_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
+{
+  ProxySide *side = user_data;
+
+  gboolean all_done = send_outgoing_buffers (socket, side);
+  if (all_done)
+    {
+      side->out_source = NULL;
+      return G_SOURCE_REMOVE;
+    }
+  else
+    {
+      return G_SOURCE_CONTINUE;
+    }
 }
 
 static void
@@ -1055,7 +1100,6 @@ queue_outgoing_buffer (ProxySide *side, Buffer *buffer)
       g_source_unref (side->out_source);
     }
 
-  buffer->pos = 0;
   side->buffers = g_list_append (side->buffers, buffer);
 }
 
@@ -1066,15 +1110,6 @@ read_uint32 (Header *header, guint8 *ptr)
     return GUINT32_FROM_BE (*(guint32 *) ptr);
   else
     return GUINT32_FROM_LE (*(guint32 *) ptr);
-}
-
-static void
-write_uint32 (Header *header, guint8 *ptr, guint32 val)
-{
-  if (header->big_endian)
-    *(guint32 *) ptr = GUINT32_TO_BE (val);
-  else
-    *(guint32 *) ptr = GUINT32_TO_LE (val);
 }
 
 static inline guint32
@@ -1185,12 +1220,11 @@ header_debug_str (GString *s, Header *header)
 }
 
 static Header *
-parse_header (Buffer *buffer, guint32 serial_offset, guint32 reply_serial_offset, guint32 hello_serial, GError **error)
+parse_header (Buffer *buffer, GError **error)
 {
   guint32 array_len, header_len;
   guint32 offset, end_offset;
   guint8 header_type;
-  guint32 reply_serial_pos = 0;
   const char *signature;
   g_autoptr(GError) str_error = NULL;
   g_autoptr(GString) header_str = NULL;
@@ -1417,7 +1451,6 @@ parse_header (Buffer *buffer, guint32 serial_offset, guint32 reply_serial_offset
             }
 
           header->has_reply_serial = TRUE;
-          reply_serial_pos = offset;
           header->reply_serial = read_uint32 (header, &buffer->data[offset]);
           offset += 4;
           break;
@@ -1592,17 +1625,6 @@ parse_header (Buffer *buffer, guint32 serial_offset, guint32 reply_serial_offset
                    header_debug_str (header_str, header));
       return NULL;
     }
-
-  if (serial_offset > 0)
-    {
-      header->serial += serial_offset;
-      write_uint32 (header, &buffer->data[8], header->serial);
-    }
-
-  if (reply_serial_offset > 0 &&
-      header->has_reply_serial &&
-      header->reply_serial > hello_serial + reply_serial_offset)
-    write_uint32 (header, &buffer->data[reply_serial_pos], header->reply_serial - reply_serial_offset);
 
   return g_steal_pointer (&header);
 }
@@ -1837,6 +1859,7 @@ message_to_buffer (GDBusMessage *message)
   blob = g_dbus_message_to_blob (message, &blob_size, G_DBUS_CAPABILITY_FLAGS_NONE, NULL);
   buffer = buffer_new (blob_size, NULL);
   memcpy (buffer->data, blob, blob_size);
+  buffer->pos = blob_size;
   g_free (blob);
 
   return buffer;
@@ -1850,7 +1873,7 @@ get_error_for_header (FlatpakProxyClient *client, Header *header, const char *er
   reply = g_dbus_message_new ();
   g_dbus_message_set_message_type (reply, G_DBUS_MESSAGE_TYPE_ERROR);
   g_dbus_message_set_flags (reply, G_DBUS_MESSAGE_FLAGS_NO_REPLY_EXPECTED);
-  g_dbus_message_set_reply_serial (reply, header->serial - client->serial_offset);
+  g_dbus_message_set_reply_serial (reply, header->serial);
   g_dbus_message_set_error_name (reply, error);
   g_dbus_message_set_body (reply, g_variant_new ("(s)", error));
 
@@ -1865,7 +1888,7 @@ get_bool_reply_for_header (FlatpakProxyClient *client, Header *header, gboolean 
   reply = g_dbus_message_new ();
   g_dbus_message_set_message_type (reply, G_DBUS_MESSAGE_TYPE_METHOD_RETURN);
   g_dbus_message_set_flags (reply, G_DBUS_MESSAGE_FLAGS_NO_REPLY_EXPECTED);
-  g_dbus_message_set_reply_serial (reply, header->serial - client->serial_offset);
+  g_dbus_message_set_reply_serial (reply, header->serial);
   g_dbus_message_set_body (reply, g_variant_new ("(b)", val));
 
   return reply;
@@ -2071,30 +2094,28 @@ policy_from_handler (BusHandler handler)
 static char *
 get_arg0_string (Buffer *buffer)
 {
-  GDBusMessage *message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  g_autoptr(GDBusMessage) message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
   GVariant *body;
-
   g_autoptr(GVariant) arg0 = NULL;
-  char *name = NULL;
 
   if (message != NULL &&
       (body = g_dbus_message_get_body (message)) != NULL &&
       (arg0 = g_variant_get_child_value (body, 0)) != NULL &&
       g_variant_is_of_type (arg0, G_VARIANT_TYPE_STRING))
-    name = g_variant_dup_string (arg0, NULL);
+    return g_variant_dup_string (arg0, NULL);
 
-  g_object_unref (message);
-
-  return name;
+  return NULL;
 }
 
 static gboolean
 validate_arg0_match (FlatpakProxyClient *client, Buffer *buffer)
 {
-  GDBusMessage *message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
-  GVariant *body, *arg0;
+  g_autoptr(GDBusMessage) message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  GVariant *body;
+  g_autoptr(GVariant) arg0 = NULL;
   const char *match;
-  gboolean res = TRUE;
 
   if (message != NULL &&
       (body = g_dbus_message_get_body (message)) != NULL &&
@@ -2103,21 +2124,21 @@ validate_arg0_match (FlatpakProxyClient *client, Buffer *buffer)
     {
       match = g_variant_get_string (arg0, NULL);
       if (strstr (match, "eavesdrop=") != NULL)
-        res = FALSE;
+        return FALSE;
     }
 
-  g_object_unref (message);
-  return res;
+  return TRUE;
 }
 
 static gboolean
 validate_arg0_name (FlatpakProxyClient *client, Buffer *buffer, FlatpakPolicy required_policy, FlatpakPolicy *has_policy)
 {
-  GDBusMessage *message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
-  GVariant *body, *arg0;
+  g_autoptr(GDBusMessage) message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  GVariant *body;
+  g_autoptr(GVariant) arg0 = NULL;
   const char *name;
   FlatpakPolicy name_policy;
-  gboolean res = FALSE;
 
   if (has_policy)
     *has_policy = FLATPAK_POLICY_NONE;
@@ -2134,20 +2155,22 @@ validate_arg0_name (FlatpakProxyClient *client, Buffer *buffer, FlatpakPolicy re
         *has_policy = name_policy;
 
       if (name_policy >= required_policy)
-        res = TRUE;
-      else if (client->proxy->log_messages)
+        return TRUE;
+
+      if (client->proxy->log_messages)
         g_print ("Filtering message due to arg0 %s, policy: %d (required %d)\n", name, name_policy, required_policy);
     }
 
-  g_object_unref (message);
-  return res;
+  return FALSE;
 }
 
 static Buffer *
 filter_names_list (FlatpakProxyClient *client, Buffer *buffer)
 {
-  GDBusMessage *message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
-  GVariant *body, *arg0, *new_names;
+  g_autoptr(GDBusMessage) message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  GVariant *body, *new_names;
+  g_autoptr(GVariant) arg0 = NULL;
   const gchar **names;
   int i;
   GVariantBuilder builder;
@@ -2174,7 +2197,6 @@ filter_names_list (FlatpakProxyClient *client, Buffer *buffer)
                            g_variant_new_tuple (&new_names, 1));
 
   filtered = message_to_buffer (message);
-  g_object_unref (message);
   return filtered;
 }
 
@@ -2192,10 +2214,13 @@ message_is_name_owner_changed (FlatpakProxyClient *client, Header *header)
 static gboolean
 should_filter_name_owner_changed (FlatpakProxyClient *client, Buffer *buffer)
 {
-  GDBusMessage *message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
-  GVariant *body, *arg0, *arg1, *arg2;
+  g_autoptr(GDBusMessage) message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  GVariant *body;
+  g_autoptr(GVariant) arg0 = NULL;
+  g_autoptr(GVariant) arg1 = NULL;
+  g_autoptr(GVariant) arg2 = NULL;
   const gchar *name, *new;
-  gboolean filter = TRUE;
 
   if (message == NULL ||
       (body = g_dbus_message_get_body (message)) == NULL ||
@@ -2219,12 +2244,10 @@ should_filter_name_owner_changed (FlatpakProxyClient *client, Buffer *buffer)
             flatpak_proxy_client_add_unique_id_owned_name (client, new, name);
         }
 
-      filter = FALSE;
+      return FALSE;
     }
 
-  g_object_unref (message);
-
-  return filter;
+  return TRUE;
 }
 
 static GList *
@@ -2293,14 +2316,14 @@ queue_fake_message (FlatpakProxyClient *client, GDBusMessage *message, ExpectedR
 {
   Buffer *buffer;
 
-  client->last_serial++;
-  client->serial_offset++;
-  g_dbus_message_set_serial (message, client->last_serial);
+  client->last_fake_serial++;
+  g_assert (client->last_fake_serial > MAX_CLIENT_SERIAL);
+  g_dbus_message_set_serial (message, client->last_fake_serial);
   buffer = message_to_buffer (message);
   g_object_unref (message);
 
   queue_outgoing_buffer (&client->bus_side, buffer);
-  queue_expected_reply (&client->client_side, client->last_serial, reply_type);
+  queue_expected_reply (&client->client_side, client->last_fake_serial, reply_type);
 }
 
 /* After the first Hello message we need to synthesize a bunch of messages to synchronize the
@@ -2346,7 +2369,7 @@ queue_initial_name_ops (FlatpakProxyClient *client)
       queue_fake_message (client, message, EXPECTED_REPLY_FILTER);
 
       if (client->proxy->log_messages)
-        g_print ("C%d: -> org.freedesktop.DBus fake %sAddMatch for %s\n", client->last_serial, name_needs_subtree ? "wildcarded " : "", name);
+        g_print ("C%d: -> org.freedesktop.DBus fake %sAddMatch for %s\n", client->last_fake_serial, name_needs_subtree ? "wildcarded " : "", name);
 
       if (!name_needs_subtree)
         {
@@ -2354,10 +2377,10 @@ queue_initial_name_ops (FlatpakProxyClient *client)
           message = g_dbus_message_new_method_call ("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "GetNameOwner");
           g_dbus_message_set_body (message, g_variant_new ("(s)", name));
           queue_fake_message (client, message, EXPECTED_REPLY_FAKE_GET_NAME_OWNER);
-          g_hash_table_replace (client->get_owner_reply, GINT_TO_POINTER (client->last_serial), g_strdup (name));
+          g_hash_table_replace (client->get_owner_reply, GINT_TO_POINTER (client->last_fake_serial), g_strdup (name));
 
           if (client->proxy->log_messages)
-            g_print ("C%d: -> org.freedesktop.DBus fake GetNameOwner for %s\n", client->last_serial, name);
+            g_print ("C%d: -> org.freedesktop.DBus fake GetNameOwner for %s\n", client->last_fake_serial, name);
         }
       else
         has_wildcards = TRUE; /* Send ListNames below */
@@ -2375,7 +2398,7 @@ queue_initial_name_ops (FlatpakProxyClient *client)
       queue_fake_message (client, message, EXPECTED_REPLY_FAKE_LIST_NAMES);
 
       if (client->proxy->log_messages)
-        g_print ("C%d: -> org.freedesktop.DBus fake ListNames\n", client->last_serial);
+        g_print ("C%d: -> org.freedesktop.DBus fake ListNames\n", client->last_fake_serial);
 
       /* Stop reading from the client, to avoid incoming messages fighting with the ListNames roundtrip.
          We will start it again once we have handled the ListNames reply */
@@ -2388,41 +2411,41 @@ queue_initial_name_ops (FlatpakProxyClient *client)
 static void
 queue_wildcard_initial_name_ops (FlatpakProxyClient *client, Header *header, Buffer *buffer)
 {
-  GDBusMessage *decoded_message = g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
-  GVariant *body, *arg0;
+  g_autoptr(GDBusMessage) decoded_message =
+    g_dbus_message_new_from_blob (buffer->data, buffer->size, 0, NULL);
+  GVariant *body;
+  g_autoptr(GVariant) arg0 = NULL;
+  g_autofree const gchar **names = NULL;
+  int i;
 
-  if (decoded_message != NULL &&
-      header->type == G_DBUS_MESSAGE_TYPE_METHOD_RETURN &&
-      (body = g_dbus_message_get_body (decoded_message)) != NULL &&
-      (arg0 = g_variant_get_child_value (body, 0)) != NULL &&
-      g_variant_is_of_type (arg0, G_VARIANT_TYPE_STRING_ARRAY))
+  if (decoded_message == NULL ||
+      header->type != G_DBUS_MESSAGE_TYPE_METHOD_RETURN ||
+      (body = g_dbus_message_get_body (decoded_message)) == NULL ||
+      (arg0 = g_variant_get_child_value (body, 0)) == NULL ||
+      !g_variant_is_of_type (arg0, G_VARIANT_TYPE_STRING_ARRAY))
+    return;
+
+  names = g_variant_get_strv (arg0, NULL);
+
+  /* Loop over all current names and get the owner for all the ones that match our rules
+     policies so that we can update the unique id policies for those */
+  for (i = 0; names[i] != NULL; i++)
     {
-      const gchar **names = g_variant_get_strv (arg0, NULL);
-      int i;
+      const char *name = names[i];
 
-      /* Loop over all current names and get the owner for all the ones that match our rules
-         policies so that we can update the unique id policies for those */
-      for (i = 0; names[i] != NULL; i++)
+      if (name[0] != ':' &&
+          flatpak_proxy_client_get_max_policy (client, name) != FLATPAK_POLICY_NONE)
         {
-          const char *name = names[i];
+          /* Get the current owner of the name (if any) so we can apply policy to it */
+          GDBusMessage *message = g_dbus_message_new_method_call ("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "GetNameOwner");
+          g_dbus_message_set_body (message, g_variant_new ("(s)", name));
+          queue_fake_message (client, message, EXPECTED_REPLY_FAKE_GET_NAME_OWNER);
+          g_hash_table_replace (client->get_owner_reply, GINT_TO_POINTER (client->last_fake_serial), g_strdup (name));
 
-          if (name[0] != ':' &&
-              flatpak_proxy_client_get_max_policy (client, name) != FLATPAK_POLICY_NONE)
-            {
-              /* Get the current owner of the name (if any) so we can apply policy to it */
-              GDBusMessage *message = g_dbus_message_new_method_call ("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "GetNameOwner");
-              g_dbus_message_set_body (message, g_variant_new ("(s)", name));
-              queue_fake_message (client, message, EXPECTED_REPLY_FAKE_GET_NAME_OWNER);
-              g_hash_table_replace (client->get_owner_reply, GINT_TO_POINTER (client->last_serial), g_strdup (name));
-
-              if (client->proxy->log_messages)
-                g_print ("C%d: -> org.freedesktop.DBus fake GetNameOwner for %s\n", client->last_serial, name);
-            }
+          if (client->proxy->log_messages)
+            g_print ("C%d: -> org.freedesktop.DBus fake GetNameOwner for %s\n", client->last_fake_serial, name);
         }
-      g_free (names);
     }
-
-  g_object_unref (decoded_message);
 }
 
 
@@ -2431,7 +2454,7 @@ got_buffer_from_client (FlatpakProxyClient *client, ProxySide *side, Buffer *buf
 {
   ExpectedReplyType expecting_reply = EXPECTED_REPLY_NONE;
 
-  if (client->authenticated && client->proxy->filter)
+  if (client->auth_state == AUTH_COMPLETE && client->proxy->filter)
     {
       g_autoptr(Header) header = NULL;
       g_autoptr(GError) error = NULL;
@@ -2439,7 +2462,7 @@ got_buffer_from_client (FlatpakProxyClient *client, ProxySide *side, Buffer *buf
 
       /* Filter and rewrite outgoing messages as needed */
 
-      header = parse_header (buffer, client->serial_offset, 0, 0, &error);
+      header = parse_header (buffer, &error);
       if (header == NULL)
         {
           g_warning ("Invalid message header format from client: %s",
@@ -2452,16 +2475,13 @@ got_buffer_from_client (FlatpakProxyClient *client, ProxySide *side, Buffer *buf
       if (!update_socket_messages (side, buffer, header))
         return;
 
-      /* Make sure the client is not playing games with the serials, as that
-         could confuse us. */
-      if (header->serial <= client->last_serial)
+      if (header->serial > MAX_CLIENT_SERIAL)
         {
-          g_warning ("Invalid client serial");
+          g_warning ("Invalid client serial: Exceeds maximum value of %u", MAX_CLIENT_SERIAL);
           side_closed (side);
           buffer_unref (buffer);
           return;
         }
-      client->last_serial = header->serial;
 
       if (client->proxy->log_messages)
         print_outgoing_header (header);
@@ -2601,7 +2621,7 @@ handle_deny:
 static void
 got_buffer_from_bus (FlatpakProxyClient *client, ProxySide *side, Buffer *buffer)
 {
-  if (client->authenticated && client->proxy->filter)
+  if (client->auth_state == AUTH_COMPLETE && client->proxy->filter)
     {
       g_autoptr(Header) header = NULL;
       g_autoptr(GError) error = NULL;
@@ -2611,7 +2631,7 @@ got_buffer_from_bus (FlatpakProxyClient *client, ProxySide *side, Buffer *buffer
 
       /* Filter and rewrite incoming messages as needed */
 
-      header = parse_header (buffer, 0, client->serial_offset, client->hello_serial, &error);
+      header = parse_header (buffer, &error);
       if (header == NULL)
         {
           g_warning ("Invalid message header format from bus: %s",
@@ -2763,11 +2783,11 @@ got_buffer_from_bus (FlatpakProxyClient *client, ProxySide *side, Buffer *buffer
           policy = flatpak_proxy_client_get_max_policy_and_matched (client, header->sender, &filters);
 
           if (policy == FLATPAK_POLICY_OWN ||
-              (policy == FLATPAK_POLICY_TALK &&
-               any_filter_matches (filters, FILTER_TYPE_BROADCAST,
-                                   header->path,
-                                   header->interface,
-                                   header->member)))
+              policy == FLATPAK_POLICY_TALK ||
+              any_filter_matches (filters, FILTER_TYPE_BROADCAST,
+                                  header->path,
+                                  header->interface,
+                                  header->member))
             filtered = FALSE;
 
           if (filtered)
@@ -2846,11 +2866,19 @@ auth_line_is_begin (guint8 *line)
          next_char == '\t';
 }
 
+static guint8 *
+find_auth_line_end (guint8 *line_start, gsize buffer_size)
+{
+  return memmem (line_start, buffer_size,
+                 AUTH_LINE_SENTINEL, strlen (AUTH_LINE_SENTINEL));
+}
+
 static gssize
-find_auth_end (FlatpakProxyClient *client, Buffer *buffer)
+find_auth_end (FlatpakProxyClient *client, Buffer *buffer, gsize *out_lines_skipped)
 {
   goffset offset = 0;
   gsize original_size = client->auth_buffer->len;
+  gsize lines_skipped = 0;
 
   /* Add the new data to the remaining data from last iteration */
   g_byte_array_append (client->auth_buffer, buffer->data, buffer->pos);
@@ -2861,8 +2889,7 @@ find_auth_end (FlatpakProxyClient *client, Buffer *buffer)
       gsize remaining_data = client->auth_buffer->len - offset;
       guint8 *line_end;
 
-      line_end = memmem (line_start, remaining_data,
-                         AUTH_LINE_SENTINEL, strlen (AUTH_LINE_SENTINEL));
+      line_end = find_auth_line_end (line_start, remaining_data);
       if (line_end) /* Found end of line */
         {
           offset = (line_end + strlen (AUTH_LINE_SENTINEL) - client->auth_buffer->data);
@@ -2872,13 +2899,18 @@ find_auth_end (FlatpakProxyClient *client, Buffer *buffer)
 
           *line_end = 0;
           if (auth_line_is_begin (line_start))
-            return offset - original_size;
+            {
+              *out_lines_skipped = lines_skipped;
+              return offset - original_size;
+            }
 
           /* continue with next line */
+          ++lines_skipped;
         }
       else
         {
-          /* No end-of-line in this buffer */
+          /* No more end-of-line in this buffer */
+          *out_lines_skipped = lines_skipped;
           g_byte_array_remove_range (client->auth_buffer, 0, offset);
 
           /* Abort if more than 16k before newline, similar to what dbus-daemon does */
@@ -2898,6 +2930,7 @@ side_in_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
   GError *error = NULL;
   Buffer *buffer;
   gboolean retval = G_SOURCE_CONTINUE;
+  gboolean wake_client_reader = FALSE;
 
   g_object_ref (client);
 
@@ -2905,8 +2938,8 @@ side_in_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
     {
       if (!side->got_first_byte)
         buffer = buffer_new (1, NULL);
-      else if (!client->authenticated)
-        buffer = buffer_new (64, NULL);
+      else if (client->auth_state != AUTH_COMPLETE)
+        buffer = buffer_new (256, NULL);
       else
         buffer = side->current_read_buffer;
 
@@ -2917,54 +2950,109 @@ side_in_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
           break;
         }
 
-      if (!client->authenticated)
+      if (client->auth_state != AUTH_COMPLETE)
         {
-          if (buffer->pos > 0)
+          if (buffer->pos == 0)
             {
-              gboolean found_auth_end = FALSE;
-              gsize extra_data;
+              buffer_unref (buffer);
+              continue;
+            }
 
-              buffer->size = buffer->pos;
-              if (!side->got_first_byte)
+          /* The state of the client after handling this buffer */
+          AuthState new_auth_state = client->auth_state;
+
+          buffer->size = buffer->pos;
+          if (!side->got_first_byte)
+            {
+              buffer->send_credentials = TRUE;
+              side->got_first_byte = TRUE;
+            }
+          /* Look for end of authentication mechanism */
+          else if (side == &client->client_side && client->auth_state == AUTH_WAITING_FOR_BEGIN)
+            {
+              gsize lines_skipped = 0;
+              gssize auth_end = find_auth_end (client, buffer, &lines_skipped);
+
+              client->auth_requests += lines_skipped;
+
+              if (auth_end >= 0)
                 {
-                  buffer->send_credentials = TRUE;
-                  side->got_first_byte = TRUE;
+                  gsize extra_data;
+
+                  if (client->auth_replies == client->auth_requests)
+                    new_auth_state = AUTH_COMPLETE;
+                  else
+                    new_auth_state = AUTH_WAITING_FOR_BACKLOG;
+
+                  extra_data = buffer->pos - auth_end;
+                  buffer->size = buffer->pos = auth_end;
+
+                  /* We may have gotten some extra data which is not part of
+                     the auth handshake, keep it for the next iteration. */
+                  if (extra_data > 0)
+                    side->extra_input_data = g_bytes_new (buffer->data + buffer->size, extra_data);
                 }
-              /* Look for end of authentication mechanism */
-              else if (side == &client->client_side)
+              else if (auth_end == FIND_AUTH_END_ABORT)
                 {
-                  gssize auth_end = find_auth_end (client, buffer);
+                  buffer_unref (buffer);
+                  if (client->proxy->log_messages)
+                    g_print ("Invalid AUTH line, aborting\n");
+                  side_closed (side);
+                  break;
+                }
+            }
+          else if (side == &client->bus_side)
+            {
+              gsize remaining = buffer->pos;
+              guint8 *line_start = buffer->data;
 
-                  if (auth_end >= 0)
-                    {
-                      found_auth_end = TRUE;
-                      buffer->size = auth_end;
-                      extra_data = buffer->pos - buffer->size;
+              while (remaining > 0)
+                {
+                  guint8 *line_end = NULL;
 
-                      /* We may have gotten some extra data which is not part of
-                         the auth handshake, keep it for the next iteration. */
-                      if (extra_data > 0)
-                        side->extra_input_data = g_bytes_new (buffer->data + buffer->size, extra_data);
-                    }
-                  else if (auth_end == FIND_AUTH_END_ABORT)
+                  if (client->auth_replies == client->auth_requests)
                     {
                       buffer_unref (buffer);
                       if (client->proxy->log_messages)
-                        g_print ("Invalid AUTH line, aborting\n");
+                        g_print ("Unexpected auth reply line from bus, aborting\n");
                       side_closed (side);
                       break;
                     }
+
+                  line_end = find_auth_line_end (line_start, remaining);
+                  if (line_end == NULL)
+                    line_end = line_start + remaining;
+                  else
+                    {
+                      line_end += strlen (AUTH_LINE_SENTINEL);
+                      client->auth_replies++;
+                    }
+
+                  remaining -= line_end - line_start;
+                  line_start = line_end;
+
+                  if (client->auth_state == AUTH_WAITING_FOR_BACKLOG &&
+                      client->auth_replies == client->auth_requests)
+                    {
+                      new_auth_state = AUTH_COMPLETE;
+                      /* We may have added extra data on the input, ensure we read it directly */
+                      wake_client_reader = TRUE;
+
+                      buffer->pos = buffer->size = line_start - buffer->data;
+
+                      /* We may have gotten some extra data which is not part of
+                         the auth handshake, keep it for the next iteration. */
+                      if (remaining > 0)
+                        side->extra_input_data = g_bytes_new (line_start, remaining);
+
+                      break;
+                    }
                 }
-
-              got_buffer_from_side (side, buffer);
-
-              if (found_auth_end)
-                client->authenticated = TRUE;
             }
-          else
-            {
-              buffer_unref (buffer);
-            }
+
+          got_buffer_from_side (side, buffer);
+
+          client->auth_state = new_auth_state;
         }
       else if (buffer->pos == buffer->size)
         {
@@ -2995,6 +3083,11 @@ side_in_cb (GSocket *socket, GIOCondition condition, gpointer user_data)
     {
       side->in_source = NULL;
       retval = G_SOURCE_REMOVE;
+    }
+  else if (wake_client_reader)
+    {
+      GSocket *client_socket = g_socket_connection_get_socket (client->client_side.connection);
+      side_in_cb (client_socket, G_IO_IN, &client->client_side);
     }
 
   g_object_unref (client);
