@@ -1,12 +1,13 @@
 Source: xdg-dbus-proxy
+X-Style: black
 Section: admin
 Priority: optional
 Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>
 Uploaders:
  Simon McVittie <smcv@debian.org>,
 Build-Depends:
- dbus-daemon <!nocheck>,
  debhelper-compat (= 13),
+ dbus-daemon <!nocheck>,
  docbook-xml,
  docbook-xsl,
  libglib2.0-dev,
@@ -40,10 +41,10 @@ Package: xdg-dbus-proxy-tests
 Architecture: any
 Multi-Arch: foreign
 Depends:
- ${misc:Depends},
- ${shlibs:Depends},
  dbus-daemon,
  xdg-dbus-proxy,
+ ${misc:Depends},
+ ${shlibs:Depends},
 Recommends:
  gnome-desktop-testing,
 Description: filtering D-Bus proxy - as-installed tests
