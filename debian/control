@@ -8,6 +8,7 @@ Uploaders:
 Build-Depends:
  debhelper-compat (= 13),
  dbus-daemon <!nocheck>,
+ dpkg-build-api (= 1),
  docbook-xml,
  docbook-xsl,
  libglib2.0-dev,
