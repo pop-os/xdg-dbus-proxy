@@ -1,3 +1,13 @@
+xdg-dbus-proxy (0.1.7-1) UNRELEASED; urgency=high
+
+  * New upstream release
+    - Prevent Flatpak apps from receiving D-Bus traffic that they should
+      not have been able to receive, by using legacy eavesdropping
+      match rules
+      (CVE-2026-34080, GHSA-vjp5-hjfm-7677)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 07 Apr 2026 19:27:42 +0100
+
 xdg-dbus-proxy (0.1.6-2) unstable; urgency=medium
 
   * Normalize packaging (debputy reformat)
