@@ -1,5 +1,11 @@
-xdg-dbus-proxy (0.1.7-2) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.8-1) UNRELEASED; urgency=medium
 
+  * New upstream release
+    - Fix a vulnerability in access control for receiving broadcasts.
+      In 0.1.6 and 0.1.7, a malicious or compromised Flatpak app could
+      receive any broadcast D-Bus message on the session bus or the AT-SPI
+      bus, leading to unintended information disclosure.
+      (GHSA-r7hp-698j-2h6c, Closes: #1144129)
   * Mention #1132939 in previous changelog entry
 
  -- Simon McVittie <smcv@debian.org>  Tue, 07 Apr 2026 21:12:44 +0100
