@@ -1,4 +1,4 @@
-xdg-dbus-proxy (0.1.8-1) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.8-1) unstable; urgency=high
 
   * New upstream release
     - Fix a vulnerability in access control for receiving broadcasts.
@@ -8,7 +8,7 @@ xdg-dbus-proxy (0.1.8-1) UNRELEASED; urgency=medium
       (GHSA-r7hp-698j-2h6c, Closes: #1144129)
   * Mention #1132939 in previous changelog entry
 
- -- Simon McVittie <smcv@debian.org>  Tue, 07 Apr 2026 21:12:44 +0100
+ -- Simon McVittie <smcv@debian.org>  Tue, 11 Aug 2026 13:32:52 +0100
 
 xdg-dbus-proxy (0.1.7-1) unstable; urgency=medium
 
