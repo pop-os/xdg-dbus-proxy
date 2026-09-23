@@ -1,9 +1,12 @@
-xdg-dbus-proxy (0.1.9-1) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.9-1) unstable; urgency=high
 
   * New upstream release
+    - Fix message filtering bypass vulnerabilities
+      (CVE-2026-94422, GHSA-2cgv-pwcq-wvpq, Closes: #1148782)
   * Mention CVE-2026-93676 in previous changelog entry
+  * d/patches/series: Remove empty patch series
 
- -- Simon McVittie <smcv@debian.org>  Mon, 21 Sep 2026 18:49:18 +0100
+ -- Simon McVittie <smcv@debian.org>  Wed, 23 Sep 2026 15:07:42 +0100
 
 xdg-dbus-proxy (0.1.8-1) unstable; urgency=high
 
