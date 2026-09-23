@@ -1,9 +1,22 @@
+Changes in 0.1.9
+================
+
+Released: 2026-09-23
+
+  * Fix message filtering bypass vulnerabilities
+    (CVE-2026-94422, GHSA-2cgv-pwcq-wvpq)
+      - Don't allow method calls and signals to be treated as requested
+        replies, even if they specify a reply serial number
+      - Only allow replies that were sent to the appropriate destination
+  * Improve automated tests to include attempts to exploit CVE-2026-94422
+
 Changes in 0.1.8
 ================
 
 Released 2026-08-11
 
   * Fix broadcast messages bypassing path/interface/member checks
+    (CVE-2026-93676, GHSA-r7hp-698j-2h6c)
   * Improvements to the existing testing infrastructure
   * Add tests for owning names, issuing method calls, receiving messages
 
@@ -17,6 +30,7 @@ Released 2025-04-07
   * Prevent a crash on disconnect
   * Fix building with glibc >= 2.43
   * Fix the eavesdrop filtering to prevent message interception
+    (CVE-2026-34080, GHSA-vjp5-hjfm-7677)
 
 Changes in 0.1.6
 ================
