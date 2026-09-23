@@ -1,5 +1,6 @@
-xdg-dbus-proxy (0.1.8-2) UNRELEASED; urgency=medium
+xdg-dbus-proxy (0.1.9-1) UNRELEASED; urgency=medium
 
+  * New upstream release
   * Mention CVE-2026-93676 in previous changelog entry
 
  -- Simon McVittie <smcv@debian.org>  Mon, 21 Sep 2026 18:49:18 +0100
